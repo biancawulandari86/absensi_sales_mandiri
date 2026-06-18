@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Absensi Mandiri</title>
+<link rel="stylesheet" href="leaflet/leaflet.css">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0d0f14; --surface:#161920; --surface2:#1e2230; --border:#2a2f42;
+    --accent:#4f8ef7; --accent2:#38d9a9; --accent3:#f77f4f;
+    --text:#e8eaf0; --muted:#7a8099; --danger:#f7504f; --gold:#f7c74f;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{
+    background:var(--bg); color:var(--text);
+    font-family:'Plus Jakarta Sans', -apple-system, sans-serif;
+    min-height:100vh; -webkit-tap-highlight-color: transparent;
+  }
+  button{font-family:inherit;}
+  .mono{font-family:'JetBrains Mono', monospace;}
+
+  .page{display:flex; flex-direction:column; min-height:100vh;}
+
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 20px; border-bottom:1px solid var(--border); background:var(--surface);
+    position:sticky; top:0; z-index:10;
+  }
+  .brand{display:flex; align-items:center; gap:9px; font-weight:800; font-size:15px; letter-spacing:-.3px;}
+  .brand .dot{width:9px; height:9px; border-radius:50%; background:var(--accent2); animation:pulse 2s infinite;}
+  @media (prefers-reduced-motion: reduce){ .brand .dot{animation:none;} }
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(56,217,169,.55)} 50%{box-shadow:0 0 0 6px rgba(56,217,169,0)}}
+  .clock{font-family:'JetBrains Mono', monospace; font-size:13px; color:var(--muted);}
+
+  .wrap{flex:1; display:flex; flex-direction:column; align-items:center; padding:22px 16px 8px;}
+
+  .config-warn{
+    max-width:420px; width:100%; background:rgba(247,199,79,.12); border:1px solid rgba(247,199,79,.35);
+    color:var(--gold); font-size:12.5px; padding:10px 14px; border-radius:10px; margin-bottom:16px; line-height:1.5;
+  }
+  .config-warn code{background:rgba(0,0,0,.25); padding:1px 5px; border-radius:4px;}
+
+  .stepper{display:flex; align-items:center; max-width:340px; width:100%; margin-bottom:22px;}
+  .step-dot{
+    width:28px; height:28px; border-radius:50%; background:var(--surface2); border:1px solid var(--border);
+    display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:var(--muted);
+    flex-shrink:0; transition:all .25s;
+  }
+  .step-dot.active{ background:var(--accent2); border-color:var(--accent2); color:#06231b; }
+  .step-dot.done{ background:rgba(56,217,169,.18); border-color:var(--accent2); color:var(--accent2); }
+  .step-line{flex:1; height:2px; background:var(--border); margin:0 4px;}
+  .step-line.done{background:var(--accent2);}
+  .step-label{font-size:10px; color:var(--muted); text-align:center; margin-top:6px; max-width:60px;}
+
+  .card{
+    width:100%; max-width:420px; background:var(--surface); border:1px solid var(--border);
+    border-radius:18px; padding:26px 22px; box-shadow:0 10px 30px rgba(0,0,0,.25);
+  }
+  .step{display:none; animation:fadeIn .3s ease;}
+  .step.active{display:block;}
+  @keyframes fadeIn{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:translateY(0)}}
+  @media (prefers-reduced-motion: reduce){ .step{animation:none;} }
+
+  h1.step-title{font-size:17px; font-weight:800; margin-bottom:4px; letter-spacing:-.3px;}
+  p.step-sub{font-size:12.5px; color:var(--muted); margin-bottom:20px; line-height:1.5;}
+
+  label.field-label{display:block; font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:7px;}
+
+  select.field-select{
+    width:100%; background:var(--surface2); border:1px solid var(--border); color:var(--text);
+    padding:12px 14px; border-radius:10px; font-size:14.5px; font-family:inherit; outline:none;
+    appearance:none; margin-bottom:20px; transition:border-color .2s;
+  }
+  select.field-select:focus{border-color:var(--accent2);}
+
+  .pin-row{display:flex; gap:10px; margin-bottom:8px;}
+  .pin-box{
+    width:100%; aspect-ratio:1/1; text-align:center; font-size:22px; font-weight:700;
+    background:var(--surface2); border:1px solid var(--border); border-radius:12px; color:var(--text);
+    font-family:'JetBrains Mono', monospace; outline:none; transition:border-color .15s, transform .1s;
+  }
+  .pin-box:focus{border-color:var(--accent2); transform:scale(1.04);}
+  .pin-hint{font-size:11.5px; color:var(--muted); margin-bottom:22px;}
+
+  .btn{
+    width:100%; padding:13px 18px; border-radius:11px; font-size:14.5px; font-weight:700;
+    cursor:pointer; border:none; transition:all .2s; display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .btn:disabled{opacity:.4; cursor:not-allowed;}
+  .btn-primary{background:var(--accent2); color:#06231b;}
+  .btn-primary:hover:not(:disabled){background:#55e0bb;}
+  .btn-secondary{background:var(--surface2); color:var(--text); border:1px solid var(--border); margin-top:10px;}
+  .btn-secondary:hover{border-color:var(--muted);}
+  .btn:focus-visible{outline:2px solid var(--accent2); outline-offset:2px;}
+
+  .tipe-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:8px;}
+  .tipe-btn{
+    background:var(--surface2); border:1.5px solid var(--border); border-radius:14px; padding:20px 10px;
+    display:flex; flex-direction:column; align-items:center; gap:8px; cursor:pointer; transition:all .2s; color:var(--text);
+  }
+  .tipe-btn .ic{font-size:26px;}
+  .tipe-btn .lbl{font-size:13.5px; font-weight:700;}
+  .tipe-btn.selected{border-color:var(--accent2); background:rgba(56,217,169,.1);}
+  .tipe-btn:disabled{opacity:.35; cursor:not-allowed;}
+  .tipe-hint{font-size:11.5px; color:var(--muted); text-align:center; min-height:16px; margin:10px 0 18px;}
+
+  .cam-wrap{
+    position:relative; width:100%; aspect-ratio:3/4; background:#000; border-radius:16px; overflow:hidden;
+    margin-bottom:16px; border:1px solid var(--border);
+  }
+  .cam-wrap video{width:100%; height:100%; object-fit:cover; transform:scaleX(-1); display:block;}
+  .cam-guide{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none;
+  }
+  .cam-guide .ring{width:62%; aspect-ratio:1/1; border-radius:50%; border:2.5px dashed rgba(255,255,255,.55);}
+  .cam-err{font-size:12.5px; color:var(--danger); background:rgba(247,80,79,.1); border:1px solid rgba(247,80,79,.3); padding:10px 12px; border-radius:10px; margin-bottom:14px; display:none; line-height:1.5;}
+
+  .photo-preview{width:100%; border-radius:16px; margin-bottom:18px; display:block; border:1px solid var(--border);}
+
+  #map{width:100%; height:210px; border-radius:14px; margin-bottom:14px; display:none; background:var(--surface2);}
+  .loc-status{font-size:13px; color:var(--muted); margin-bottom:14px; display:flex; align-items:center; gap:8px;}
+  .spinner{width:14px; height:14px; border:2px solid var(--border); border-top-color:var(--accent2); border-radius:50%; animation:spin .7s linear infinite; flex-shrink:0;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .radius-badge{font-size:12.5px; font-weight:700; padding:8px 12px; border-radius:10px; margin-bottom:16px; text-align:center;}
+  .radius-badge.ok{background:rgba(56,217,169,.12); color:var(--accent2); border:1px solid rgba(56,217,169,.3);}
+  .radius-badge.bad{background:rgba(247,80,79,.12); color:var(--danger); border:1px solid rgba(247,80,79,.3);}
+  .radius-badge.warn{background:rgba(247,199,79,.12); color:var(--gold); border:1px solid rgba(247,199,79,.3);}
+
+  .result-wrap{text-align:center; padding:10px 0 4px;}
+  .result-icon{font-size:52px; margin-bottom:14px; line-height:1;}
+  .result-msg{font-size:14.5px; line-height:1.6; margin-bottom:22px; color:var(--text);}
+  .result-thumb{width:110px; height:110px; border-radius:50%; object-fit:cover; border:3px solid var(--accent2); margin-bottom:18px;}
+
+  .foot{text-align:center; font-size:11.5px; color:var(--muted); padding:18px;}
+
+  @media (max-width:380px){ .card{padding:22px 16px;} }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="topbar">
+    <div class="brand"><span class="dot"></span> Absensi Mandiri</div>
+    <div class="clock mono" id="liveClock">--:--:--</div>
+  </div>
+
+  <div class="wrap">
+    <div class="config-warn" id="configWarn">
+      ⚠️ <strong>Belum dikonfigurasi.</strong> Buka file ini, cari baris <code>const API_URL</code> di bagian
+      &lt;script&gt; paling bawah, lalu ganti dengan URL Web App Apps Script kamu (akhiran <code>/exec</code>).
+    </div>
+
+    <div class="stepper" id="stepper">
+      <div class="step-dot active" data-dot="1"><span>1</span></div>
+      <div class="step-line" data-line="1"></div>
+      <div class="step-dot" data-dot="2"><span>2</span></div>
+      <div class="step-line" data-line="2"></div>
+      <div class="step-dot" data-dot="3"><span>3</span></div>
+      <div class="step-line" data-line="3"></div>
+      <div class="step-dot" data-dot="4"><span>4</span></div>
+    </div>
+
+    <div class="card">
+
+      <!-- STEP 1: Identitas -->
+      <section class="step active" id="step1">
+        <h1 class="step-title">Siapa kamu?</h1>
+        <p class="step-sub">Pilih nama dan masukkan PIN absen kamu.</p>
+
+        <label class="field-label">Nama Sales</label>
+        <select class="field-select" id="selNama">
+          <option value="">— Memuat daftar nama —</option>
+        </select>
+
+        <label class="field-label">PIN (4 digit)</label>
+        <div class="pin-row" id="pinRow">
+          <input type="tel" inputmode="numeric" maxlength="1" class="pin-box" data-i="0">
+          <input type="tel" inputmode="numeric" maxlength="1" class="pin-box" data-i="1">
+          <input type="tel" inputmode="numeric" maxlength="1" class="pin-box" data-i="2">
+          <input type="tel" inputmode="numeric" maxlength="1" class="pin-box" data-i="3">
+        </div>
+        <p class="pin-hint">PIN diberikan oleh admin. Hubungi admin jika lupa.</p>
+
+        <button class="btn btn-primary" id="btnStep1Next" disabled>Lanjut →</button>
+      </section>
+
+      <!-- STEP 2: Jenis Absen -->
+      <section class="step" id="step2">
+        <h1 class="step-title">Absen apa hari ini?</h1>
+        <p class="step-sub" id="step2Sub">Pilih jenis absensi yang ingin dicatat.</p>
+
+        <div class="tipe-grid">
+          <button class="tipe-btn" id="btnTipeMasuk" data-tipe="Masuk">
+            <span class="ic">🟢</span><span class="lbl">Masuk</span>
+          </button>
+          <button class="tipe-btn" id="btnTipeKeluar" data-tipe="Keluar">
+            <span class="ic">🔴</span><span class="lbl">Keluar</span>
+          </button>
+        </div>
+        <p class="tipe-hint" id="tipeHint"></p>
+
+        <button class="btn btn-primary" id="btnStep2Next" disabled>Lanjut →</button>
+        <button class="btn btn-secondary" onclick="goStep(1)">← Kembali</button>
+      </section>
+
+      <!-- STEP 3: Kamera -->
+      <section class="step" id="step3">
+        <h1 class="step-title">Ambil foto selfie</h1>
+        <p class="step-sub">Posisikan wajah di dalam lingkaran, lalu tekan tombol ambil foto.</p>
+
+        <div class="cam-err" id="camErr"></div>
+
+        <div class="cam-wrap">
+          <video id="camVideo" autoplay playsinline muted></video>
+          <div class="cam-guide"><div class="ring"></div></div>
+        </div>
+
+        <button class="btn btn-primary" id="btnCapture">📸 Ambil Foto</button>
+        <button class="btn btn-secondary" onclick="goStep(2)">← Kembali</button>
+      </section>
+
+      <!-- STEP 3b: Konfirmasi Foto -->
+      <section class="step" id="step3b">
+        <h1 class="step-title">Foto sudah pas?</h1>
+        <p class="step-sub">Periksa lagi sebelum melanjutkan.</p>
+
+        <img class="photo-preview" id="previewImg" alt="Preview foto selfie">
+
+        <button class="btn btn-primary" id="btnPhotoNext">Lanjut →</button>
+        <button class="btn btn-secondary" id="btnRetake">↺ Ambil Ulang</button>
+      </section>
+
+      <!-- STEP 4: Lokasi -->
+      <section class="step" id="step4">
+        <h1 class="step-title">Cek lokasi kamu</h1>
+        <p class="step-sub">Lokasi GPS dicatat sebagai bukti absen.</p>
+
+        <div class="loc-status" id="locStatus"><div class="spinner"></div> Mencari lokasi…</div>
+        <div id="map"></div>
+        <div class="radius-badge" id="radiusBadge" style="display:none"></div>
+
+        <button class="btn btn-primary" id="btnSubmitAbsen" disabled>Kirim Absen Sekarang</button>
+        <button class="btn btn-secondary" onclick="goStep(3)">← Kembali</button>
+      </section>
+
+      <!-- STEP 5: Hasil -->
+      <section class="step" id="step5">
+        <div class="result-wrap" id="resultWrap"></div>
+      </section>
+
+    </div>
+  </div>
+
+  <div class="foot">Absensi Mandiri · Selfie & Lokasi GPS</div>
+</div>
+
+<canvas id="captureCanvas" style="display:none"></canvas>
+
+<script src="leaflet/leaflet.js"></script>
+<script>
+// ════════════════════════════════════════════════════════════
+//  KONFIGURASI — ganti dengan URL Web App Apps Script kamu
+//  Cara dapat URL: Apps Script editor → Deploy → Manage deployments
+//  → copy URL yang berakhiran /exec
+// ════════════════════════════════════════════════════════════
+const API_URL = 'GANTI_DENGAN_URL_WEB_APP_GAS_DISINI';
+
+// ── State global ──────────────────────────────────────────
+const state = {
+  nama: '', pin: '', tipe: '',
+  fotoBase64: '', lat: null, lng: null, akurasi: null,
+  lokasiList: []
+};
+let videoStream = null;
+let leafletMap = null, userMarker = null, geofenceCircles = [];
+
+// ── Util ──────────────────────────────────────────────────
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function hitungJarak(lat1,lng1,lat2,lng2){
+  const R = 6371000, toRad = d => d*Math.PI/180;
+  const dLat = toRad(lat2-lat1), dLng = toRad(lng2-lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+async function postAction(action, payload={}){
+  const res = await fetch(API_URL, {
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify(Object.assign({action}, payload))
+  });
+  if (!res.ok) throw new Error('Server merespons status ' + res.status);
+  return res.json();
+}
+
+// ── Jam real-time ─────────────────────────────────────────
+function tickClock(){
+  const now = new Date();
+  document.getElementById('liveClock').textContent = now.toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+setInterval(tickClock, 1000); tickClock();
+
+// ── Step navigation ───────────────────────────────────────
+const stepOrder = ['step1','step2','step3','step3b','step4','step5'];
+const dotForStep = {step1:1, step2:2, step3:3, step3b:3, step4:4, step5:4};
+
+function goStep(stepNum){
+  // dipanggil dgn nomor (1..4) dari tombol "Kembali"
+  const map = {1:'step1', 2:'step2', 3:'step3', 4:'step4'};
+  showStep(map[stepNum]);
+}
+function showStep(id){
+  stepOrder.forEach(s => document.getElementById(s).classList.toggle('active', s === id));
+  updateStepper(id);
+  if (id === 'step3') startCamera(); else stopCamera();
+  if (id === 'step4') getLocation();
+}
+function updateStepper(id){
+  const current = dotForStep[id] || 1;
+  document.querySelectorAll('.step-dot').forEach(dot => {
+    const n = Number(dot.dataset.dot);
+    dot.classList.remove('active','done');
+    if (n < current) dot.classList.add('done');
+    else if (n === current) dot.classList.add('active');
+  });
+  document.querySelectorAll('.step-line').forEach(line => {
+    const n = Number(line.dataset.line);
+    line.classList.toggle('done', n < current);
+  });
+}
+
+// ── STEP 1: load nama sales + PIN boxes ─────────────────────
+async function initPage(){
+  if (API_URL.indexOf('GANTI_DENGAN') !== -1){
+    document.getElementById('configWarn').style.display = 'block';
+  }
+  try {
+    const data = await postAction('initAbsen');
+    if (!data.ok) throw new Error(data.msg || 'Gagal memuat data.');
+    state.lokasiList = data.lokasi || [];
+    const sel = document.getElementById('selNama');
+    sel.innerHTML = '<option value="">— Pilih Nama —</option>' +
+      (data.sales||[]).map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  } catch(err){
+    document.getElementById('selNama').innerHTML = '<option value="">Gagal memuat (cek koneksi/API_URL)</option>';
+  }
+}
+
+const pinBoxes = Array.from(document.querySelectorAll('.pin-box'));
+pinBoxes.forEach((box, idx) => {
+  box.addEventListener('input', () => {
+    box.value = box.value.replace(/[^0-9]/g, '');
+    if (box.value && idx < pinBoxes.length - 1) pinBoxes[idx+1].focus();
+    refreshStep1();
+  });
+  box.addEventListener('keydown', (e) => {
+    if (e.key === 'Backspace' && !box.value && idx > 0) pinBoxes[idx-1].focus();
+  });
+});
+document.getElementById('selNama').addEventListener('change', refreshStep1);
+
+function refreshStep1(){
+  state.nama = document.getElementById('selNama').value;
+  state.pin  = pinBoxes.map(b => b.value).join('');
+  document.getElementById('btnStep1Next').disabled = !(state.nama && state.pin.length === 4);
+}
+
+document.getElementById('btnStep1Next').addEventListener('click', async () => {
+  showStep('step2');
+  document.getElementById('step2Sub').textContent = 'Memeriksa status absen hari ini…';
+  document.getElementById('tipeHint').textContent = '';
+  try {
+    const status = await postAction('cekStatusHariIni', { nama: state.nama });
+    let hint = '';
+    if (status.ok && status.sudahMasuk) hint += `Sudah Masuk pukul ${status.jamMasuk}. `;
+    if (status.ok && status.sudahKeluar) hint += `Sudah Keluar pukul ${status.jamKeluar}.`;
+    document.getElementById('tipeHint').textContent = hint;
+    document.getElementById('step2Sub').textContent = 'Pilih jenis absensi yang ingin dicatat.';
+  } catch(err){
+    document.getElementById('step2Sub').textContent = 'Pilih jenis absensi yang ingin dicatat.';
+  }
+});
+
+// ── STEP 2: pilih tipe ───────────────────────────────────────
+['btnTipeMasuk','btnTipeKeluar'].forEach(id => {
+  document.getElementById(id).addEventListener('click', () => {
+    state.tipe = document.getElementById(id).dataset.tipe;
+    document.getElementById('btnTipeMasuk').classList.toggle('selected', id==='btnTipeMasuk');
+    document.getElementById('btnTipeKeluar').classList.toggle('selected', id==='btnTipeKeluar');
+    document.getElementById('btnStep2Next').disabled = false;
+  });
+});
+document.getElementById('btnStep2Next').addEventListener('click', () => showStep('step3'));
+
+// ── STEP 3: kamera ───────────────────────────────────────────
+async function startCamera(){
+  const errBox = document.getElementById('camErr');
+  errBox.style.display = 'none';
+  try {
+    videoStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user', width:{ideal:720} }, audio:false });
+    const video = document.getElementById('camVideo');
+    video.srcObject = videoStream;
+    await video.play();
+  } catch(err){
+    errBox.textContent = '❌ Tidak bisa mengakses kamera: ' + err.message + '. Pastikan izin kamera sudah diaktifkan di browser.';
+    errBox.style.display = 'block';
+  }
+}
+function stopCamera(){
+  if (videoStream){ videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
+}
+document.getElementById('btnCapture').addEventListener('click', () => {
+  const video = document.getElementById('camVideo');
+  if (!video.videoWidth){ return; }
+  const canvas = document.getElementById('captureCanvas');
+  const maxW = 720;
+  const scale = Math.min(1, maxW / video.videoWidth);
+  canvas.width = video.videoWidth * scale;
+  canvas.height = video.videoHeight * scale;
+  canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+  state.fotoBase64 = canvas.toDataURL('image/jpeg', 0.75);
+  document.getElementById('previewImg').src = state.fotoBase64;
+  showStep('step3b');
+});
+
+// ── STEP 3b: konfirmasi foto ──────────────────────────────────
+document.getElementById('btnPhotoNext').addEventListener('click', () => showStep('step4'));
+document.getElementById('btnRetake').addEventListener('click', () => showStep('step3'));
+
+// ── STEP 4: lokasi + peta Leaflet ──────────────────────────────
+function getLocation(){
+  document.getElementById('btnSubmitAbsen').disabled = true;
+  document.getElementById('locStatus').style.display = 'flex';
+  document.getElementById('locStatus').innerHTML = '<div class="spinner"></div> Mencari lokasi…';
+  document.getElementById('radiusBadge').style.display = 'none';
+
+  if (!navigator.geolocation){
+    document.getElementById('locStatus').innerHTML = '❌ Perangkat tidak mendukung GPS.';
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(pos => {
+    state.lat = pos.coords.latitude;
+    state.lng = pos.coords.longitude;
+    state.akurasi = pos.coords.accuracy;
+    document.getElementById('locStatus').style.display = 'none';
+    renderMap();
+    document.getElementById('btnSubmitAbsen').disabled = false;
+  }, err => {
+    document.getElementById('locStatus').innerHTML = '❌ Gagal mengambil lokasi: ' + err.message + '. Aktifkan GPS & izinkan akses lokasi, lalu coba lagi.';
+  }, { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
+}
+
+function renderMap(){
+  const mapEl = document.getElementById('map');
+  mapEl.style.display = 'block';
+
+  if (!leafletMap){
+    leafletMap = L.map('map', { zoomControl:true, attributionControl:true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom:19, attribution:'&copy; OpenStreetMap'
+    }).addTo(leafletMap);
+  }
+  leafletMap.setView([state.lat, state.lng], 16);
+
+  if (userMarker) leafletMap.removeLayer(userMarker);
+  userMarker = L.marker([state.lat, state.lng]).addTo(leafletMap).bindPopup('Posisi kamu sekarang');
+
+  geofenceCircles.forEach(c => leafletMap.removeLayer(c));
+  geofenceCircles = [];
+
+  let dalamRadius = false, jarakTerdekat = Infinity, namaTerdekat = '';
+  state.lokasiList.forEach(lok => {
+    const circle = L.circle([lok.lat, lok.lng], {
+      radius: lok.radius, color:'#4f8ef7', fillColor:'#4f8ef7', fillOpacity:0.12, weight:2
+    }).addTo(leafletMap).bindPopup(escapeHtml(lok.nama) + ' (radius ' + lok.radius + 'm)');
+    geofenceCircles.push(circle);
+    const jarak = hitungJarak(state.lat, state.lng, lok.lat, lok.lng);
+    if (jarak < jarakTerdekat){ jarakTerdekat = jarak; namaTerdekat = lok.nama; }
+    if (jarak <= lok.radius) dalamRadius = true;
+  });
+
+  setTimeout(() => leafletMap.invalidateSize(), 150);
+
+  const badge = document.getElementById('radiusBadge');
+  badge.style.display = 'block';
+  if (state.lokasiList.length === 0){
+    badge.className = 'radius-badge warn';
+    badge.textContent = 'ℹ️ Lokasi referensi belum diatur admin.';
+  } else if (dalamRadius){
+    badge.className = 'radius-badge ok';
+    badge.textContent = `✅ Dalam radius (${Math.round(jarakTerdekat)} m dari ${namaTerdekat})`;
+  } else {
+    badge.className = 'radius-badge bad';
+    badge.textContent = `⚠️ Di luar radius — ${Math.round(jarakTerdekat)} m dari ${namaTerdekat}`;
+  }
+}
+
+// ── Submit absen ─────────────────────────────────────────────
+document.getElementById('btnSubmitAbsen').addEventListener('click', async () => {
+  const btn = document.getElementById('btnSubmitAbsen');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Mengirim…';
+  try {
+    const result = await postAction('submitAbsen', {
+      nama: state.nama, pin: state.pin, tipe: state.tipe,
+      lat: state.lat, lng: state.lng, akurasi: state.akurasi,
+      foto: state.fotoBase64, deviceInfo: navigator.userAgent
+    });
+    if (result.ok) showResult(true, result); else showResult(false, result);
+  } catch(err){
+    showResult(false, { msg: 'Tidak bisa terhubung ke server: ' + err.message });
+  }
+  btn.disabled = false;
+  btn.innerHTML = 'Kirim Absen Sekarang';
+});
+
+function showResult(success, result){
+  const wrap = document.getElementById('resultWrap');
+  if (success){
+    wrap.innerHTML = `
+      <div class="result-icon">✅</div>
+      <img class="result-thumb" src="${state.fotoBase64}" alt="Foto absen">
+      <div class="result-msg">${escapeHtml(result.msg || 'Absen berhasil dicatat.')}</div>
+      <button class="btn btn-primary" onclick="resetFlow()">Selesai</button>
+    `;
+  } else {
+    wrap.innerHTML = `
+      <div class="result-icon">⚠️</div>
+      <div class="result-msg">${escapeHtml(result.msg || 'Terjadi kesalahan.')}</div>
+      <button class="btn btn-primary" onclick="retryFromError('${escapeHtml(result.msg||'')}')">Coba Lagi</button>
+    `;
+  }
+  showStep('step5');
+}
+function retryFromError(msg){
+  if (msg.indexOf('PIN') !== -1){
+    pinBoxes.forEach(b => b.value=''); pinBoxes[0].focus();
+    showStep('step1');
+  } else if (msg.indexOf('lokasi') !== -1 || msg.indexOf('radius') !== -1 || msg.indexOf('Lokasi') !== -1){
+    showStep('step4');
+  } else {
+    showStep('step4');
+  }
+}
+function resetFlow(){
+  state.tipe=''; state.fotoBase64=''; state.lat=null; state.lng=null;
+  document.getElementById('btnTipeMasuk').classList.remove('selected');
+  document.getElementById('btnTipeKeluar').classList.remove('selected');
+  document.getElementById('btnStep2Next').disabled = true;
+  showStep('step2');
+}
+
+// ── Mulai ──────────────────────────────────────────────────
+initPage();
+window.addEventListener('beforeunload', stopCamera);
+</script>
+</body>
+</html>
