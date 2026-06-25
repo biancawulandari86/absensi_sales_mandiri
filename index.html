@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Absensi Sales</title>
+  <title>Absensi Kunjungan Sales</title>
 
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -67,10 +67,6 @@
       background: #e0f2fe; color: #0369a1; padding: 2px 8px;
       border-radius: 999px; font-size: 11px; margin-top: 6px;
     }
-    .pelanggan-item .sales-tag {
-      display: inline-block; background: #f1f5f9; color: #475569;
-      padding: 2px 8px; border-radius: 999px; font-size: 11px; margin-top: 4px; margin-left: 4px;
-    }
 
     .btn {
       width: 100%; padding: 14px; border: none; border-radius: 10px;
@@ -90,11 +86,11 @@
     }
     .summary-card .row {
       display: flex; justify-content: space-between; padding: 6px 0;
-      font-size: 14px; border-bottom: 1px dashed #e2e8f0; gap: 12px;
+      font-size: 14px; border-bottom: 1px dashed #e2e8f0;
     }
     .summary-card .row:last-child { border-bottom: none; }
-    .summary-card .row .k { color: #64748b; flex-shrink: 0; }
-    .summary-card .row .v { font-weight: 600; color: #0f172a; text-align: right; word-break: break-word; }
+    .summary-card .row .k { color: #64748b; }
+    .summary-card .row .v { font-weight: 600; color: #0f172a; word-break: break-word; text-align: right; max-width: 65%; }
 
     .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
     .status-opt {
@@ -141,17 +137,37 @@
       background: #fef3c7; border-left: 3px solid #f59e0b; padding: 10px 12px;
       border-radius: 6px; margin-bottom: 12px; font-size: 12px; color: #92400e;
     }
+
+    .config-warn {
+      background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;
+      padding: 14px; border-radius: 10px; margin-bottom: 16px; font-size: 13px;
+      line-height: 1.5;
+    }
+    .config-warn code {
+      background: #fee2e2; padding: 2px 6px; border-radius: 4px;
+      font-family: 'SFMono-Regular', Menlo, monospace; font-size: 12px;
+    }
   </style>
 </head>
 <body>
   <div class="app">
     <div class="header">
-      <h1 id="stepTitle">Pilih Sales</h1>
-      <p id="stepDesc">Langkah 1 dari 3</p>
-      <div class="progress-bar"><div id="progressFill"></div></div>
+      <h1 id="stepTitle">Absensi Kunjungan</h1>
+      <p id="stepDesc">Memuat data…</p>
+      <div class="progress-bar"><div id="progressFill" style="width:0%"></div></div>
     </div>
 
     <div class="content">
+      <!-- Config warning — muncul kalau API_URL belum diganti -->
+      <div class="config-warn" id="configWarn" style="display:none;">
+        ⚠️ <strong>API_URL belum dikonfigurasi.</strong> Buka file <code>absen.html</code> ini,
+        cari baris <code>const API_URL</code> di bagian <code>&lt;script&gt;</code>, lalu ganti
+        dengan URL Web App Apps Script kamu (akhiran <code>/exec</code>).<br><br>
+        Cara dapat URL: Apps Script editor → <strong>Deploy</strong> → <strong>New deployment</strong>
+        → pilih <strong>Web app</strong> → Execute as: <em>Me</em> → Who has access: <em>Anyone</em>
+        → <strong>Deploy</strong> → copy URL.
+      </div>
+
       <div id="loaderInit" class="loader"></div>
 
       <!-- STEP 1: PILIH SALES -->
@@ -163,7 +179,7 @@
           </select>
         </div>
         <div class="field">
-          <label class="label">Tanggal Kunjungan</label>
+          <label class="label">Tanggal</label>
           <input type="date" class="input" id="absenDate">
         </div>
         <button class="btn btn-primary" id="nextStep1" disabled>Lanjut →</button>
@@ -171,9 +187,7 @@
 
       <!-- STEP 2: PILIH PELANGGAN -->
       <div class="step" id="step2">
-        <div class="warning-box" id="filterInfo" style="display:none;">
-          📋 Menampilkan pelanggan yang ditugaskan ke sales ini.
-        </div>
+        <div class="warning-box" id="filterInfo" style="display:none;"></div>
         <div class="search-box">
           <span class="icon">🔍</span>
           <input type="text" class="input" id="searchPelanggan" placeholder="Cari nama pelanggan…">
@@ -208,12 +222,12 @@
         </div>
         <div class="actions">
           <button class="btn btn-secondary" data-back="2">← Kembali</button>
-          <button class="btn btn-primary" id="submitBtn" disabled>Kirim Absen</button>
+          <button class="btn btn-primary" id="submitBtn" disabled>Cek Lokasi Dulu</button>
         </div>
       </div>
 
       <div class="footer-info">
-        Sistem Absensi Sales • Powered by Google Apps Script
+        Sistem Absensi Kunjungan Sales • Powered by Google Apps Script
       </div>
     </div>
   </div>
@@ -221,6 +235,14 @@
   <div class="toast" id="toast"></div>
 
   <script>
+    // ════════════════════════════════════════════════════════════════
+    //  KONFIGURASI — ganti dengan URL Web App Apps Script kamu
+    //  Cara dapat URL: Apps Script editor → Deploy → New deployment
+    //  → pilih Web app → Execute as: Me → Who has access: Anyone
+    //  → Deploy → copy URL yang berakhiran /exec
+    // ════════════════════════════════════════════════════════════════
+    const API_URL = 'https://script.google.com/macros/s/AKfycbwA6_C5OqfuYmevLxmWVvPxI92DSqTO-XJ11G5YVPMwgPX_g5qj-e4Vsqsse6skptdw/exec';
+
     // ===== STATE =====
     const state = {
       init: null,
@@ -235,7 +257,7 @@
       userLat: null,
       userLng: null,
       geoOk: false,
-      geoWatchId: null
+      submitting: false
     };
 
     // ===== TOAST =====
@@ -249,11 +271,34 @@
 
     // ===== HELPERS =====
     function $(id) { return document.getElementById(id); }
+    function escapeHtml(s) {
+      if (s == null) return '';
+      return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+    }
     function fmtDate(d) {
       const y = d.getFullYear();
       const m = String(d.getMonth()+1).padStart(2,'0');
       const dd = String(d.getDate()).padStart(2,'0');
       return `${y}-${m}-${dd}`;
+    }
+
+    // ===== API CALL (fetch ke Apps Script Web App) =====
+    // Pakai Content-Type: text/plain supaya gak trigger CORS preflight
+    // (Apps Script Web App gak handle OPTIONS request)
+    async function postAction(action, payload = {}) {
+      const body = Object.assign({ action }, payload);
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error('Server merespons status ' + res.status);
+      const data = await res.json();
+      // Handle rate limit dari server
+      if (data.ok === false && data.msg && data.msg.indexOf('Terlalu banyak request') !== -1) {
+        throw new Error('Terlalu banyak percobaan. Tunggu 1 menit lalu coba lagi.');
+      }
+      return data;
     }
 
     // ===== NAVIGATION =====
@@ -269,30 +314,53 @@
       $('stepTitle').textContent = titles[n][0];
       $('stepDesc').textContent = titles[n][1];
       $('progressFill').style.width = (n * 33.33) + '%';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       if (n === 3) initStep3();
     }
 
     // ===== INIT PAGE =====
-    function initPage() {
-      google.script.run.withSuccessHandler(function(data) {
+    async function initPage() {
+      // Cek apakah API_URL sudah dikonfigurasi
+      if (API_URL.indexOf('GANTI_DENGAN') !== -1 || !API_URL || API_URL.length < 40) {
+        $('configWarn').style.display = 'block';
+        $('loaderInit').style.display = 'none';
+        $('stepTitle').textContent = 'Belum Dikonfigurasi';
+        $('stepDesc').textContent = 'Set API_URL dulu';
+        return;
+      }
+
+      try {
+        const data = await postAction('initAbsen');
+        if (!data.ok) throw new Error(data.msg || 'Gagal memuat data.');
+
         state.init = data;
-        // Isi dropdown sales (sekarang format: { id, nama, area })
+
+        // Isi dropdown sales
         const sel = $('salesSelect');
+        sel.innerHTML = '<option value="">— Pilih sales —</option>';
         (data.sales || []).forEach(s => {
           const opt = document.createElement('option');
           opt.value = s.id;
           opt.textContent = s.nama + (s.area ? ' — ' + s.area : '');
           sel.appendChild(opt);
         });
-        // Tanggal default hari ini (dari server time)
-        const today = data.serverTime ? new Date(data.serverTime) : new Date();
-        $('absenDate').value = fmtDate(today);
+
+        // Tanggal default hari ini (pakai server time kalau ada, supaya sinkron sama TZ Apps Script)
+        const serverDate = data.serverTime ? new Date(data.serverTime) : new Date();
+        $('absenDate').value = fmtDate(serverDate);
+
         $('loaderInit').style.display = 'none';
         goToStep(1);
-      }).withFailureHandler(function(err) {
+
+        if ((data.sales || []).length === 0) {
+          toast('⚠️ Belum ada data sales. Hubungi admin.', 4000);
+        }
+      } catch (err) {
         $('loaderInit').style.display = 'none';
-        toast('Gagal load data: ' + err.message);
-      }).getInitAbsenMandiri();
+        $('stepTitle').textContent = 'Gagal Memuat';
+        $('stepDesc').textContent = err.message;
+        toast('❌ Gagal load data: ' + err.message, 5000);
+      }
     }
 
     // ===== STEP 1 → STEP 2 =====
@@ -309,31 +377,36 @@
     });
 
     // ===== STEP 2: RENDER PELANGGAN LIST =====
-    function renderPelangganList() {
+    async function renderPelangganList() {
       const list = $('pelangganList');
       list.innerHTML = '<div class="loader" style="margin:20px auto;"></div>';
+      $('searchPelanggan').value = '';
+      $('nextStep2').disabled = true;
+      state.pelangganId = '';
+      state.pelangganNama = '';
 
-      // Coba ambil pelanggan yang ditugaskan ke sales ini
-      google.script.run.withSuccessHandler(function(res) {
+      try {
+        const res = await postAction('getPelangganBySales', { salesNama: state.salesNama });
         list.innerHTML = '';
         let pelanggan = [];
 
         if (res && res.ok && res.data && res.data.length > 0) {
-          // Berhasil filter per sales
           pelanggan = res.data;
           if (res.filtered) {
             $('filterInfo').style.display = 'block';
-            $('filterInfo').innerHTML = '📋 Menampilkan ' + pelanggan.length + ' pelanggan yang ditugaskan ke <b>' + state.salesNama + '</b>.';
+            $('filterInfo').innerHTML = '📋 Menampilkan ' + pelanggan.length + ' pelanggan yang ditugaskan ke <b>' + escapeHtml(state.salesNama) + '</b>.';
           } else {
             $('filterInfo').style.display = 'block';
-            $('filterInfo').innerHTML = '📋 Data pelanggan tidak punya kolom Sales — menampilkan semua (' + pelanggan.length + ').';
+            $('filterInfo').innerHTML = '📋 Menampilkan semua pelanggan (' + pelanggan.length + '). Data pelanggan tidak punya kolom Sales, jadi sales bebas pilih.';
           }
         } else {
-          // Fallback: pakai semua pelanggan dari state.init
-          pelanggan = (state.init.pelanggan || []);
-          $('filterInfo').style.display = pelanggan.length > 0 ? 'none' : 'block';
+          // Fallback: pakai pelanggan dari state.init (data initAbsen)
+          pelanggan = (state.init && state.init.pelanggan) || [];
           if (pelanggan.length === 0) {
+            $('filterInfo').style.display = 'block';
             $('filterInfo').innerHTML = '⚠️ Belum ada data pelanggan. Minta admin jalankan <code>fetchDataPelanggan()</code> di Apps Script.';
+          } else {
+            $('filterInfo').style.display = 'none';
           }
         }
 
@@ -351,19 +424,13 @@
             <div class="nama">🏢 ${escapeHtml(p.nama)}</div>
             <div class="meta">${p.alamat ? '📍 ' + escapeHtml(p.alamat) : '<em style="color:#cbd5e1;">Tanpa alamat</em>'}</div>
             ${p.telepon ? '<div class="meta-telepon">📞 ' + escapeHtml(p.telepon) + '</div>' : ''}
-            ${p.sales ? '<span class="sales-tag">Sales: ' + escapeHtml(p.sales) + '</span>' : ''}
           `;
           div.addEventListener('click', () => selectPelanggan(div, p));
           list.appendChild(div);
         });
-      }).withFailureHandler(function(err) {
-        list.innerHTML = '<p style="text-align:center;color:#b91c1c;padding:20px;">Gagal load pelanggan: ' + err.message + '</p>';
-      }).getPelangganBySales(state.salesNama);
-    }
-
-    function escapeHtml(s) {
-      if (s == null) return '';
-      return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+      } catch (err) {
+        list.innerHTML = '<p style="text-align:center;color:#b91c1c;padding:20px;">Gagal load pelanggan: ' + escapeHtml(err.message) + '</p>';
+      }
     }
 
     function selectPelanggan(el, p) {
@@ -374,7 +441,6 @@
       state.pelangganAlamat = p.alamat || '';
       state.pelangganTelepon = p.telepon || '';
       $('nextStep2').disabled = false;
-      // Scroll selected ke view
       el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
@@ -429,6 +495,7 @@
       info.className = 'geo-info loading';
       info.innerHTML = '<span>📍 Mendapatkan lokasi Anda… Pastikan GPS aktif & izinkan akses lokasi.</span>';
       $('submitBtn').disabled = true;
+      $('submitBtn').textContent = 'Cek Lokasi Dulu';
       state.geoOk = false;
       state.userLat = null;
       state.userLng = null;
@@ -446,6 +513,7 @@
           info.className = 'geo-info ok';
           info.innerHTML = '<span>✅ Lokasi tercatat: <b>' + state.userLat.toFixed(5) + ', ' + state.userLng.toFixed(5) + '</b><br>Akurasi: ±' + Math.round(pos.coords.accuracy || 0) + ' m<br><a href="https://maps.google.com/?q=' + state.userLat + ',' + state.userLng + '" target="_blank" style="color:#0f766e;text-decoration:underline;">Lihat di Maps ↗</a></span>';
           $('submitBtn').disabled = false;
+          $('submitBtn').textContent = 'Kirim Absen';
         },
         err => {
           let msg = '❌ Gagal mendapatkan lokasi: ';
@@ -464,17 +532,20 @@
       info.className = 'geo-info err';
       info.innerHTML = '<div><span>' + msg + '</span><br><button class="retry-btn" id="retryGeo">🔄 Coba lagi</button></div>';
       $('submitBtn').disabled = true;  // ★ MANDATORY: gak bisa submit tanpa lokasi
+      $('submitBtn').textContent = 'Cek Lokasi Dulu';
       $('retryGeo').addEventListener('click', getUserLocation);
     }
 
     // ===== SUBMIT =====
-    $('submitBtn').addEventListener('click', () => {
-      // Double-check geo
+    $('submitBtn').addEventListener('click', async () => {
+      // ★ MANDATORY: Double-check geo sebelum submit
       if (!state.geoOk || !state.userLat || !state.userLng) {
         toast('📍 Aktifkan lokasi dulu untuk absen!', 3500);
         getUserLocation();
         return;
       }
+      if (state.submitting) return;
+      state.submitting = true;
 
       const btn = $('submitBtn');
       btn.disabled = true;
@@ -491,20 +562,24 @@
         catatan: $('catatan').value
       };
 
-      google.script.run.withSuccessHandler(res => {
+      try {
+        const res = await postAction('submitAbsen', payload);
+        // ★ Backend submitAbsen() return { success, message } (bukan ok/msg)
         if (res.success) {
           toast('✅ ' + res.message, 3000);
           setTimeout(() => location.reload(), 1800);
         } else {
-          toast('❌ ' + res.message, 4500);
+          toast('❌ ' + (res.message || res.msg || 'Gagal submit'), 4500);
           btn.disabled = false;
           btn.textContent = 'Kirim Absen';
+          state.submitting = false;
         }
-      }).withFailureHandler(err => {
-        toast('❌ ' + err.message, 3500);
+      } catch (err) {
+        toast('❌ ' + err.message, 4000);
         btn.disabled = false;
         btn.textContent = 'Kirim Absen';
-      }).submitAbsen(payload);
+        state.submitting = false;
+      }
     });
 
     // ===== START =====
